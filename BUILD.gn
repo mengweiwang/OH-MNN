@@ -1,0 +1,585 @@
+# Copyright (c) 2022 Shenzhen Kaihong Digital Industry Development Co., Ltd. 
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# MNN build
+
+import("//build/ohos.gni")
+import("//third_party/mnn/MNN.gni")
+
+config("mnn_config") {
+  cflags_cc = [ "-fPIC",
+                "-stdlib=libc++",
+                "-fstrict-aliasing",
+                "-ffunction-sections",
+                "-fdata-sections",
+                "-ffast-math",
+                "-fno-rtti",
+                "-fno-exceptions",
+                "-Wno-unused-function",
+                "-Wno-unused-variable",
+                "-Wno-reorder-ctor",
+                "-Wno-ignored-qualifiers",
+                "-Wno-overloaded-virtual",
+                "-Wno-sometimes-uninitialized",
+                "-Wno-format",
+                "-Wno-header-hygiene",
+                "-Wno-unused-private-field",
+                "-Wno-unused-local-typedef",
+  ]
+
+  if (MNN_USE_CPP11) {
+    cflags_cc += ["-std=c++11"]
+  }
+
+  if (is_debug) {
+    cflags_cc += ["-g"]
+  }
+  else {
+    cflags_cc += ["-O3"]
+  }
+  
+  include_dirs = [ "//third_party/mnn/include/",
+                   "//third_party/mnn/source/",
+                   "//third_party/mnn/express/",
+                   "//third_party/mnn/tools/",
+                   "//third_party/mnn/tools/cpp/",
+                   "//third_party/mnn/codegen/",
+                   "//third_party/mnn/schema/current/",
+                   "//third_party/mnn/3rd_party/",
+                   "//third_party/mnn/3rd_party/flatbuffers/include",
+                   "//third_party/mnn/3rd_party/half",
+                   "//third_party/mnn/3rd_party/imageHelper",
+                   "//third_party/mnn/3rd_party/OpenCLHeaders/",
+                   "//third_party/mnn/source/core/",
+                   "//third_party/mnn/source/cv/",
+                   "//third_party/mnn/source/math/",
+                   "//third_party/mnn/source/shape/",
+                   "//third_party/mnn/source/geometry/",
+                   "//third_party/mnn/source/utils/",
+                   "//third_party/mnn/express/module/",
+                   "//third_party/mnn/express/",
+                   "//third_party/mnn/source/backend/cpu/",
+                   "//third_party/mnn/source/backend/cpu/compute/",
+                   "//third_party/mnn/include/MNN/",
+                   "//third_party/mnn/include/MNN/expr",
+                   "//third_party/mnn/benchmark/",
+                   "//third_party/mnn/benchmark/exprModels/",
+  ]
+
+  defines = ["MNN_SUPPORT_TFLITE_QUAN",
+              "MNN_USE_THREAD_POOL",
+              "__STRICT_ANSI__",
+              "MNN_DEBUG",
+              "DEBUG",
+              "MNN_VERSION=0.2.1.5git",
+              "MNN_VERSION_MAJOR=0",
+              "MNN_VERSION_MINOR=2",
+              "MNN_VERSION_PATCH=1",
+   ]
+
+  if (MNN_USE_SPARSE_COMPUTE) {
+    defines += ["MNN_USE_SPARSE_COMPUTE"]
+  }
+  if (MNN_SUPPORT_BF16) {    
+    defines += ["MNN_SUPPORT_BF16"]
+  }
+  if (target_cpu == "arm") {
+    defines += ["__arm__"]
+    defines += ["MNN_USE_NEON"]
+    include_dirs += ["//third_party/mnn/source/backend/cpu/arm/"]
+  } else if (target_cpu == "arm64") {
+    defines += ["__aarch64__"]
+    defines += ["MNN_USE_NEON"]
+    include_dirs += ["//third_party/mnn/source/backend/cpu/arm/"]
+  } else if (target_cpu == "x86_64" || target_cpu == "X86_64" || 
+        target_cpu == "x64" || target_cpu == "X64" || 
+        target_cpu == "amd64" || target_cpu == "AMD64" || target_cpu == "i686") {
+    if (MNN_USE_SSE) {
+      defines += ["MNN_X86_USE_ASM"]
+      cflags_cc += ["-msse4.1", "-mavx2", "-mfma"]
+      if (MNN_SUPPORT_BF16 && MNN_SSE_USE_FP16_INSTEAD) {
+        defines += ["MNN_SSE_USE_FP16_INSTEAD"]
+        cflags_cc += ["-mf16c" ]
+      }
+    }
+  }
+
+  ldflags = ["-lpthread"]
+}
+
+ohos_shared_library("MNN_Express") {
+  sources = [ "//third_party/mnn/express/Executor.cpp",
+            "//third_party/mnn/express/ExecutorScope.cpp",
+            "//third_party/mnn/express/Expr.cpp",
+            "//third_party/mnn/express/MathOp.cpp",
+            "//third_party/mnn/express/MergeOptimizer.cpp",
+            "//third_party/mnn/express/NeuralNetWorkOp.cpp",
+            "//third_party/mnn/express/Optimizer.cpp",
+            "//third_party/mnn/express/Utils.cpp",
+            "//third_party/mnn/express/module/IfModule.cpp",
+            "//third_party/mnn/express/module/Module.cpp",
+            "//third_party/mnn/express/module/PipelineModule.cpp",
+            "//third_party/mnn/express/module/StaticModule.cpp",
+            "//third_party/mnn/express/module/WhileModule.cpp",
+  ]
+  configs = [ ":mnn_config" ]
+
+  deps = [":ohosmnn"]
+ 
+  #下面两项，请根据实际进行修改并取消注释
+  #part_name = "inputmethod_native"
+  #subsystem_name = "miscservices"
+}
+
+ohos_shared_library("ohosmnn") {
+  configs = [ ":mnn_config" ]
+  
+  sources = ["//third_party/mnn/cmake/dummy.cpp",
+            "//third_party/mnn/source/core/AutoTime.cpp",
+            "//third_party/mnn/source/core/Backend.cpp",
+            "//third_party/mnn/source/core/BackendRegister.cpp",
+            "//third_party/mnn/source/core/BufferAllocator.cpp",
+            "//third_party/mnn/source/core/ConvolutionCommon.cpp",
+            "//third_party/mnn/source/core/Execution.cpp",
+            "//third_party/mnn/source/core/FileLoader.cpp",
+            "//third_party/mnn/source/core/Interpreter.cpp",
+            "//third_party/mnn/source/core/MNNMemoryUtils.cpp",
+            "//third_party/mnn/source/core/OpCommonUtils.cpp",
+            "//third_party/mnn/source/core/Pipeline.cpp",
+            "//third_party/mnn/source/core/RuntimeFactory.cpp",
+            "//third_party/mnn/source/core/Schedule.cpp",
+            "//third_party/mnn/source/core/Session.cpp",
+            "//third_party/mnn/source/core/Tensor.cpp",
+            "//third_party/mnn/source/core/TensorUtils.cpp",
+            "//third_party/mnn/source/core/WrapExecution.cpp",
+
+            "//third_party/mnn/source/cv/ImageProcess.cpp",
+            "//third_party/mnn/source/cv/Matrix_CV.cpp",
+            "//third_party/mnn/source/cv/ImageBlitter.cpp",
+            "//third_party/mnn/source/cv/ImageFloatBlitter.cpp",
+            "//third_party/mnn/source/cv/ImageSampler.cpp",
+
+            "//third_party/mnn/source/math/Matrix.cpp",
+            "//third_party/mnn/source/math/WingoradGenerater.cpp",
+
+            "//third_party/mnn/source/shape/ShapeArgMax.cpp",
+            "//third_party/mnn/source/shape/ShapeBatchToSpaceND.cpp",
+            "//third_party/mnn/source/shape/ShapeBinaryOp.cpp",
+            "//third_party/mnn/source/shape/ShapeBroadcastTo.cpp",
+            "//third_party/mnn/source/shape/ShapeCast.cpp",
+            "//third_party/mnn/source/shape/ShapeConcat.cpp",
+            "//third_party/mnn/source/shape/ShapeConvolution3D.cpp",
+            "//third_party/mnn/source/shape/ShapeConvolution.cpp",
+            "//third_party/mnn/source/shape/ShapeCosineSimilarity.cpp",
+            "//third_party/mnn/source/shape/ShapeCropAndResize.cpp",
+            "//third_party/mnn/source/shape/ShapeCrop.cpp",
+            "//third_party/mnn/source/shape/ShapeDeconvolution.cpp",
+            "//third_party/mnn/source/shape/ShapeDepthToSpace.cpp",
+            "//third_party/mnn/source/shape/ShapeDequantize.cpp",
+            "//third_party/mnn/source/shape/ShapeDetectionOutput.cpp",
+            "//third_party/mnn/source/shape/ShapeDetectionPostProcess.cpp",
+            "//third_party/mnn/source/shape/ShapeEltwise.cpp",
+            "//third_party/mnn/source/shape/ShapeExpandDims.cpp",
+            "//third_party/mnn/source/shape/ShapeFill.cpp",
+            "//third_party/mnn/source/shape/ShapeGatherND.cpp",
+            "//third_party/mnn/source/shape/ShapeGatherV2.cpp",
+            "//third_party/mnn/source/shape/ShapeGridSample.cpp",
+            "//third_party/mnn/source/shape/ShapeInnerProduct.cpp",
+            "//third_party/mnn/source/shape/ShapeInterp.cpp",
+            "//third_party/mnn/source/shape/ShapeLinSpace.cpp",
+            "//third_party/mnn/source/shape/ShapeLSTM.cpp",
+            "//third_party/mnn/source/shape/ShapeMatMul.cpp",
+            "//third_party/mnn/source/shape/ShapeMoments.cpp",
+            "//third_party/mnn/source/shape/ShapeNonMaxSuppressionV2.cpp",
+            "//third_party/mnn/source/shape/ShapeOneHot.cpp",
+            "//third_party/mnn/source/shape/ShapePack.cpp",
+            "//third_party/mnn/source/shape/ShapePadding.cpp",
+            "//third_party/mnn/source/shape/ShapePermute.cpp",
+            "//third_party/mnn/source/shape/ShapePlugin.cpp",
+            "//third_party/mnn/source/shape/ShapePool3D.cpp",
+            "//third_party/mnn/source/shape/ShapePool.cpp",
+            "//third_party/mnn/source/shape/ShapePriorbox.cpp",
+            "//third_party/mnn/source/shape/ShapeProposal.cpp",
+            "//third_party/mnn/source/shape/ShapeQuantizedAvgPool.cpp",
+            "//third_party/mnn/source/shape/ShapeQuantizedMaxPool.cpp",
+            "//third_party/mnn/source/shape/ShapeRandomUniform.cpp",
+            "//third_party/mnn/source/shape/ShapeRange.cpp",
+            "//third_party/mnn/source/shape/ShapeRank.cpp",
+            "//third_party/mnn/source/shape/ShapeReduction.cpp",
+            "//third_party/mnn/source/shape/ShapeRegister.cpp",
+            "//third_party/mnn/source/shape/ShapeReshape.cpp",
+            "//third_party/mnn/source/shape/ShapeResize.cpp",
+            "//third_party/mnn/source/shape/ShapeRNNSequenceGRU.cpp",
+            "//third_party/mnn/source/shape/ShapeROIPooling.cpp",
+            "//third_party/mnn/source/shape/ShapeScatterNd.cpp",
+            "//third_party/mnn/source/shape/ShapeSelect.cpp",
+            "//third_party/mnn/source/shape/ShapeShape.cpp",
+            "//third_party/mnn/source/shape/ShapeSize.cpp",
+            "//third_party/mnn/source/shape/ShapeSlice.cpp",
+            "//third_party/mnn/source/shape/ShapeSliceTf.cpp",
+            "//third_party/mnn/source/shape/ShapeSpaceToBatchND.cpp",
+            "//third_party/mnn/source/shape/ShapeSpaceToDepth.cpp",
+            "//third_party/mnn/source/shape/ShapeSqueeze.cpp",
+            "//third_party/mnn/source/shape/ShapeStridedSlice.cpp",
+            "//third_party/mnn/source/shape/ShapeTensorArray.cpp",
+            "//third_party/mnn/source/shape/ShapeTensorConvert.cpp",
+            "//third_party/mnn/source/shape/ShapeTile.cpp",
+            "//third_party/mnn/source/shape/ShapeTopKV2.cpp",
+            "//third_party/mnn/source/shape/ShapeTranspose.cpp",
+            "//third_party/mnn/source/shape/ShapeUnpack.cpp",
+            "//third_party/mnn/source/shape/ShapeUnravelIndex.cpp",
+            "//third_party/mnn/source/shape/ShapeWhere.cpp",
+            "//third_party/mnn/source/shape/SizeComputer.cpp",
+            "//third_party/mnn/source/shape/ShapeAsString.cpp",
+            "//third_party/mnn/source/shape/ShapeConst.cpp",
+            "//third_party/mnn/source/shape/ShapeReduceJoin.cpp",
+
+            "//third_party/mnn/source/geometry/ConvertUtils.cpp",
+            "//third_party/mnn/source/geometry/GeometryBatchMatMul.cpp",
+            "//third_party/mnn/source/geometry/GeometryBinary.cpp",
+            "//third_party/mnn/source/geometry/GeometryBroadcastTo.cpp",
+            "//third_party/mnn/source/geometry/GeometryComputer.cpp",
+            "//third_party/mnn/source/geometry/GeometryComputerUtils.cpp",
+            "//third_party/mnn/source/geometry/GeometryConcat.cpp",
+            "//third_party/mnn/source/geometry/GeometryConv2DBackPropFilter.cpp",
+            "//third_party/mnn/source/geometry/GeometryConv2D.cpp",
+            "//third_party/mnn/source/geometry/GeometryConv3D.cpp",
+            "//third_party/mnn/source/geometry/GeometryConvert.cpp",
+            "//third_party/mnn/source/geometry/GeometryConvUtils.cpp",
+            "//third_party/mnn/source/geometry/GeometryCosineSimilarity.cpp",
+            "//third_party/mnn/source/geometry/GeometryCrop.cpp",
+            "//third_party/mnn/source/geometry/GeometryDepthToSpace.cpp",
+            "//third_party/mnn/source/geometry/GeometryDilation2D.cpp",
+            "//third_party/mnn/source/geometry/GeometryELU.cpp",
+            "//third_party/mnn/source/geometry/GeometryFill.cpp",
+            "//third_party/mnn/source/geometry/GeometryGather.cpp",
+            "//third_party/mnn/source/geometry/GeometryImageOp.cpp",
+            "//third_party/mnn/source/geometry/GeometryInnerProduct.cpp",
+            "//third_party/mnn/source/geometry/GeometryLRN.cpp",
+            "//third_party/mnn/source/geometry/GeometryLSTM.cpp",
+            "//third_party/mnn/source/geometry/GeometryOPRegister.cpp",
+            "//third_party/mnn/source/geometry/GeometryPermute.cpp",
+            "//third_party/mnn/source/geometry/GeometryPoolGrad.cpp",
+            "//third_party/mnn/source/geometry/GeometryPooling3D.cpp",
+            "//third_party/mnn/source/geometry/GeometryReduce.cpp",
+            "//third_party/mnn/source/geometry/GeometryReshape.cpp",
+            "//third_party/mnn/source/geometry/GeometryReverseSequence.cpp",
+            "//third_party/mnn/source/geometry/GeometrySelect.cpp",
+            "//third_party/mnn/source/geometry/GeometryShape.cpp",
+            "//third_party/mnn/source/geometry/GeometrySlice.cpp",
+            "//third_party/mnn/source/geometry/GeometrySpaceToBatchND.cpp",
+            "//third_party/mnn/source/geometry/GeometrySpatialProduct.cpp",
+            "//third_party/mnn/source/geometry/GeometryStridedSlice.cpp",
+            "//third_party/mnn/source/geometry/GeometryTensorArray.cpp",
+            "//third_party/mnn/source/geometry/GeometryThreshold.cpp",
+            "//third_party/mnn/source/geometry/GeometryTile.cpp",
+            "//third_party/mnn/source/geometry/GeometryUnary.cpp",
+            "//third_party/mnn/source/utils/InitNet.cpp",
+
+            "//third_party/mnn/source/backend/cpu/CPUArgMax.cpp",
+            "//third_party/mnn/source/backend/cpu/CPUBackend.cpp",
+            "//third_party/mnn/source/backend/cpu/CPUBinary.cpp",
+            "//third_party/mnn/source/backend/cpu/CPUCast.cpp",
+            "//third_party/mnn/source/backend/cpu/CPUConvolution.cpp",
+            "//third_party/mnn/source/backend/cpu/CPUConvolutionDepthwise.cpp",
+            "//third_party/mnn/source/backend/cpu/CPUCropAndResize.cpp",
+            "//third_party/mnn/source/backend/cpu/CPUDeconvolution.cpp",
+            "//third_party/mnn/source/backend/cpu/CPUDeconvolutionDepthwise.cpp",
+            "//third_party/mnn/source/backend/cpu/CPUDepthwiseConvInt8.cpp",
+            "//third_party/mnn/source/backend/cpu/CPUDequantize.cpp",
+            "//third_party/mnn/source/backend/cpu/CPUDetectionOutput.cpp",
+            "//third_party/mnn/source/backend/cpu/CPUDetectionPostProcess.cpp",
+            "//third_party/mnn/source/backend/cpu/CPUEltwise.cpp",
+            "//third_party/mnn/source/backend/cpu/CPUEltwiseInt8.cpp",
+            "//third_party/mnn/source/backend/cpu/CPUFloatToInt8.cpp",
+            "//third_party/mnn/source/backend/cpu/CPUGridSample.cpp",
+            "//third_party/mnn/source/backend/cpu/CPUInstanceNorm.cpp",
+            "//third_party/mnn/source/backend/cpu/CPUInt8ToFloat.cpp",
+            "//third_party/mnn/source/backend/cpu/CPUInterp.cpp",
+            "//third_party/mnn/source/backend/cpu/CPULayerNorm.cpp",
+            "//third_party/mnn/source/backend/cpu/CPULinSpace.cpp",
+            "//third_party/mnn/source/backend/cpu/CPUMatMul.cpp",
+            "//third_party/mnn/source/backend/cpu/CPUMatrixBandPart.cpp",
+            "//third_party/mnn/source/backend/cpu/CPUMoments.cpp",
+            "//third_party/mnn/source/backend/cpu/CPUNonMaxSuppressionV2.cpp",
+            "//third_party/mnn/source/backend/cpu/CPUOneHot.cpp",
+            "//third_party/mnn/source/backend/cpu/CPUOPRegister.cpp",
+            "//third_party/mnn/source/backend/cpu/CPUPlugin.cpp",
+            "//third_party/mnn/source/backend/cpu/CPUPool.cpp",
+            "//third_party/mnn/source/backend/cpu/CPUPoolInt8.cpp",
+            "//third_party/mnn/source/backend/cpu/CPUProposal.cpp",
+            "//third_party/mnn/source/backend/cpu/CPUQuanConvolutionDepthwise.cpp",
+            "//third_party/mnn/source/backend/cpu/CPUQuantizedAdd.cpp",
+            "//third_party/mnn/source/backend/cpu/CPUQuantizedAvgPool.cpp",
+            "//third_party/mnn/source/backend/cpu/CPUQuantizedLogistic.cpp",
+            "//third_party/mnn/source/backend/cpu/CPUQuantizedMaxPool.cpp",
+            "//third_party/mnn/source/backend/cpu/CPUQuantizedSoftmax.cpp",
+            "//third_party/mnn/source/backend/cpu/CPURandomUniform.cpp",
+            "//third_party/mnn/source/backend/cpu/CPURange.cpp",
+            "//third_party/mnn/source/backend/cpu/CPURaster.cpp",
+            "//third_party/mnn/source/backend/cpu/CPUReduction.cpp",
+            "//third_party/mnn/source/backend/cpu/CPURelu.cpp",
+            "//third_party/mnn/source/backend/cpu/CPUResize.cpp",
+            "//third_party/mnn/source/backend/cpu/CPURNNSequenceGRU.cpp",
+            "//third_party/mnn/source/backend/cpu/CPUROIPooling.cpp",
+            "//third_party/mnn/source/backend/cpu/CPURuntime.cpp",
+            "//third_party/mnn/source/backend/cpu/CPUScale.cpp",
+            "//third_party/mnn/source/backend/cpu/CPUScatterNd.cpp",
+            "//third_party/mnn/source/backend/cpu/CPUSelect.cpp",
+            "//third_party/mnn/source/backend/cpu/CPUSetDiff1D.cpp",
+            "//third_party/mnn/source/backend/cpu/CPUSoftmax.cpp",
+            "//third_party/mnn/source/backend/cpu/CPUTensorConvert.cpp",
+            "//third_party/mnn/source/backend/cpu/CPUTFQuantizedConv2D.cpp",
+            "//third_party/mnn/source/backend/cpu/CPUTopKV2.cpp",
+            "//third_party/mnn/source/backend/cpu/CPUUnary.cpp",
+            "//third_party/mnn/source/backend/cpu/CPUUnravelIndex.cpp",
+            "//third_party/mnn/source/backend/cpu/CPUWhere.cpp",
+            "//third_party/mnn/source/backend/cpu/OneDNNConvInt8.cpp",
+            "//third_party/mnn/source/backend/cpu/OneDNNConvolution.cpp",
+            "//third_party/mnn/source/backend/cpu/ThreadPool.cpp",
+            "//third_party/mnn/source/backend/cpu/CPUAsString.cpp",
+            "//third_party/mnn/source/backend/cpu/CPUConst.cpp",
+            "//third_party/mnn/source/backend/cpu/CPUReduceJoin.cpp",
+
+            "//third_party/mnn/source/backend/cpu/compute/CommonOptFunction.cpp",
+            "//third_party/mnn/source/backend/cpu/compute/ConvInt8TiledExecutor.cpp",
+            "//third_party/mnn/source/backend/cpu/compute/Convolution1x1Strassen.cpp",
+            "//third_party/mnn/source/backend/cpu/compute/ConvolutionDepthwise3x3.cpp",
+            "//third_party/mnn/source/backend/cpu/compute/ConvolutionFloatFactory.cpp",
+            "//third_party/mnn/source/backend/cpu/compute/ConvolutionGroup.cpp",
+            "//third_party/mnn/source/backend/cpu/compute/ConvolutionInt8Executor.cpp",
+            "//third_party/mnn/source/backend/cpu/compute/ConvolutionIntFactory.cpp",
+            "//third_party/mnn/source/backend/cpu/compute/ConvolutionTiledExecutor.cpp",
+            "//third_party/mnn/source/backend/cpu/compute/ConvolutionWinograd.cpp",
+            "//third_party/mnn/source/backend/cpu/compute/ConvOpt.cpp",
+            "//third_party/mnn/source/backend/cpu/compute/DeconvolutionWithStride.cpp",
+            "//third_party/mnn/source/backend/cpu/compute/DenseConvolutionTiledExecutor.cpp",
+            "//third_party/mnn/source/backend/cpu/compute/Int8FunctionsOpt.cpp",
+            "//third_party/mnn/source/backend/cpu/compute/OptimizedComputer.cpp",
+            "//third_party/mnn/source/backend/cpu/compute/ResizeFunction.cpp",
+            "//third_party/mnn/source/backend/cpu/compute/SparseConvolutionTiledExecutor.cpp",
+            "//third_party/mnn/source/backend/cpu/compute/StrassenMatmulComputor.cpp",
+            "//third_party/mnn/source/backend/cpu/compute/WinogradOptFunction.cpp",
+            "//third_party/mnn/source/backend/cpu/compute/ConvInt8Winograd.cpp",
+            "//third_party/mnn/source/backend/cpu/compute/WinogradInt8Helper.cpp",
+    ]       
+    
+    if (target_cpu == "arm") {
+      sources += ["//third_party/mnn/source/backend/cpu/arm/CommonOptFunctionNeon.cpp",
+            "//third_party/mnn/source/backend/cpu/arm/arm32/MNNAddC4WithStride.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm32/MNNAxByClampBroadcastC4.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm32/MNNBlitC1ToFloatRGBA.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm32/MNNBlitC3ToFloatRGBA.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm32/MNNConvDwF23MulTransUnit.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm32/MNNConvDwF23SourceTransUnit.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm32/MNNConvRunForLineDepthWiseInt8.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm32/MNNConvRunForLineDepthwise.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm32/MNNConvRunForLineDepthWiseUint8.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm32/MNNConvRunForUnitDepthWise.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm32/MNNConvRunForUnitDepthWiseUint8.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm32/MNNCopyC4WithStride.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm32/MNNDeconvRunForUnitDepthWise.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm32/MNNExpC8.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm32/MNNFloat2Int8.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm32/MNNGemmInt8AddBiasScale_16x4_Unit_FAST.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm32/MNNGemmInt8AddBiasScale_16x4_Unit.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm32/MNNGemmint8to32_8x4_Unit.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm32/MNNInt8ScaleToFloat.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm32/MNNLineDepthWiseInt8AddBiasScaleUnit.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm32/MNNLoadU8AndSum.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm32/MNNMatrixAdd.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm32/MNNMatrixMax.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm32/MNNMatrixProd.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm32/MNNMatrixSub.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm32/MNNMaxFloat.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm32/MNNMinFloat.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm32/MNNNV21ToBGRAUnit.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm32/MNNNV21ToBGRUnit.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm32/MNNNV21ToRGBAUnit.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm32/MNNNV21ToRGBUnit.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm32/MNNPackC4ForMatMul_A.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm32/MNNPackC4.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm32/MNNPackedMatMulRemain.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm32/MNNPackedMatMul.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm32/MNNPackedSparseMatMulEpx1.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm32/MNNPackedSparseMatMulEpx4.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm32/MNNPowC8.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm32/MNNQuanToDestUint8.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm32/MNNReluInt8.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm32/MNNReluWithSlopeChannel.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm32/MNNSamplerC1BilinearOpt.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm32/MNNSamplerC1NearestOpt.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm32/MNNSamplerC4BilinearOpt.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm32/MNNSamplerC4NearestOpt.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm32/MNNScaleAddInt8.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm32/MNNScaleAndAddBias.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm32/MNNStrassenMergeCFunction.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm32/MNNTranspose32Bit4x4.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm32/MNNUInt8ToInt16WithOffsetC4Common.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm32/MNNUInt8ToInt16WithOffsetC4Fast.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm32/MNNUnPackC4.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm32/MNNVectorTop1Float.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm32/MNNVectorTop1Int32.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm32/MNNWinogradMatrixProductLeft.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm32/MNNWinogradMatrixProductRight.S",
+            
+            "//third_party/mnn/source/backend/cpu/arm/arm32/MNNAxByClampBroadcastC4_BF16.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm32/MNNConvRunForLineDepthwise_BF16.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm32/MNNConvRunForUnitDepthWise_BF16.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm32/MNNPackC4_BF16.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm32/MNNPackC4ForMatMul_A_BF16.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm32/MNNPackedMatMul_BF16.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm32/MNNPackedMatMulRemain_BF16.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm32/MNNUnPackC4_BF16.S",
+
+      ]
+
+      if (MNN_SUPPORT_BF16) {
+        sources += ["//third_party/mnn/source/backend/cpu/arm/CommonNeonBF16.cpp"]
+      }
+    } else if (target_cpu == "arm64") {
+      sources += [
+            "//third_party/mnn/source/backend/cpu/arm/CommonOptFunctionNeon.cpp",
+            "//third_party/mnn/source/backend/cpu/arm/arm64/MNNAddC4WithStride.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm64/MNNAxByClampBroadcastC4.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm64/MNNBlitC1ToFloatRGBA.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm64/MNNBlitC3ToFloatRGBA.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm64/MNNConvDwF23MulTransUnit.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm64/MNNConvDwF23SourceTransUnit.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm64/MNNConvRunForLineDepthWiseInt8.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm64/MNNConvRunForLineDepthwise.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm64/MNNConvRunForLineDepthWiseUint8.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm64/MNNConvRunForUnitDepthWise.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm64/MNNConvRunForUnitDepthWiseUint8.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm64/MNNCopyC4WithStride.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm64/MNNDeconvRunForUnitDepthWise.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm64/MNNExpC8.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm64/MNNFloat2Int8.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm64/MNNGemmInt8AddBiasScale_16x4_Unit_FAST.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm64/MNNGemmInt8AddBiasScale_16x4_Unit.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm64/MNNGemmInt8AddBiasScale_ARMV82_Unit.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm64/MNNGemmint8to32_8x4_Unit.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm64/MNNInt8ScaleToFloat.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm64/MNNLineDepthWiseInt8AddBiasScaleUnit.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm64/MNNLoadU8AndSum.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm64/MNNMatrixAdd.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm64/MNNMatrixMax.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm64/MNNMatrixProd.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm64/MNNMatrixSub.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm64/MNNMaxFloat.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm64/MNNMinFloat.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm64/MNNNV21ToBGRAUnit.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm64/MNNNV21ToBGRUnit.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm64/MNNNV21ToRGBAUnit.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm64/MNNNV21ToRGBUnit.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm64/MNNPackC4ForMatMul_A.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm64/MNNPackC4.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm64/MNNPackC8.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm64/MNNPackedMatMulRemain.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm64/MNNPackedMatMul.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm64/MNNPackedSparseMatMulEpx1.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm64/MNNPackedSparseMatMulEpx4.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm64/MNNPowC8.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm64/MNNQuanToDestUint8.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm64/MNNReluInt8.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm64/MNNReluWithSlopeChannel.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm64/MNNSamplerC1BilinearOpt.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm64/MNNSamplerC1NearestOpt.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm64/MNNSamplerC4BilinearOpt.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm64/MNNSamplerC4NearestOpt.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm64/MNNScaleAddInt8.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm64/MNNScaleAndAddBias.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm64/MNNStrassenMergeCFunction.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm64/MNNTranspose32Bit4x4.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm64/MNNUInt8ToInt16WithOffsetC4Common.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm64/MNNUInt8ToInt16WithOffsetC4Fast.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm64/MNNUnPackC4.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm64/MNNVectorTop1Float.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm64/MNNVectorTop1Int32.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm64/MNNWinogradMatrixProductLeft.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm64/MNNWinogradMatrixProductRight.S",
+            
+            "//third_party/mnn/source/backend/cpu/arm/arm64/MNNAxByClampBroadcastC4_BF16.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm64/MNNConvRunForLineDepthwise_BF16.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm64/MNNConvRunForUnitDepthWise_BF16.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm64/MNNPackC4_BF16.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm64/MNNPackC4ForMatMul_A_BF16.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm64/MNNPackC8_BF16.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm64/MNNPackedMatMul_BF16.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm64/MNNPackedMatMulRemain_BF16.S",
+            "//third_party/mnn/source/backend/cpu/arm/arm64/MNNUnPackC4_BF16.S",
+
+      ]
+
+      if (MNN_SUPPORT_BF16) {
+        sources += ["//third_party/mnn/source/backend/cpu/arm/CommonNeonBF16.cpp"]
+      }
+    }
+
+    if (MNN_USE_SSE) {
+      if (target_cpu == "x86_64" || target_cpu == "X86_64" || 
+          target_cpu == "x64" || target_cpu == "X64" || 
+          target_cpu == "amd64" || target_cpu == "AMD64" || target_cpu == "i686") {
+        sources += [
+            "//third_party/mnn/source/backend/cpu/x86_x64/AVX2Backend.cpp",
+            "//third_party/mnn/source/backend/cpu/x86_x64/AVX2Backend.hpp",
+            "//third_party/mnn/source/backend/cpu/x86_x64/AVX2Functions.cpp",
+            "//third_party/mnn/source/backend/cpu/x86_x64/AVX2Functions.hpp",
+            "//third_party/mnn/source/backend/cpu/x86_x64/cpu_id.cc",
+            "//third_party/mnn/source/backend/cpu/x86_x64/cpu_id.h",
+            "//third_party/mnn/source/backend/cpu/x86_x64/FunctionDispatcher.cpp",
+            "//third_party/mnn/source/backend/cpu/x86_x64/MNNAsmGlobal.h",
+
+            "//third_party/mnn/source/backend/cpu/x86_x64/avx/_AVX_MNNGemmInt8AddBiasScale_16x4_Unit_1.S",
+            "//third_party/mnn/source/backend/cpu/x86_x64/avx/_AVX_MNNGemmInt8AddBiasScale_16x4_Unit.S",
+            "//third_party/mnn/source/backend/cpu/x86_x64/avx/FunctionSummary.hpp",
+            "//third_party/mnn/source/backend/cpu/x86_x64/avx/GemmAVX2.cpp",
+            "//third_party/mnn/source/backend/cpu/x86_x64/avx/GemmCommonBF16.cpp",
+            "//third_party/mnn/source/backend/cpu/x86_x64/avx/GemmCommon.cpp",
+            "//third_party/mnn/source/backend/cpu/x86_x64/avx/GemmCommon.hpp",
+            "//third_party/mnn/source/backend/cpu/x86_x64/avx/GemmFunctionEShort.hpp",
+            "//third_party/mnn/source/backend/cpu/x86_x64/avx/GemmFunction.hpp",
+            "//third_party/mnn/source/backend/cpu/x86_x64/avx/GemmFunctionPackL.hpp",
+            "//third_party/mnn/source/backend/cpu/x86_x64/avx/GemmInt8.cpp",
+            "//third_party/mnn/source/backend/cpu/x86_x64/avx/Vec8.hpp",
+            
+            "//third_party/mnn/source/backend/cpu/x86_x64/avx/CommonOptFunction.cpp",
+            "//third_party/mnn/source/backend/cpu/x86_x64/avx/MNNMatrixAdd.cpp",
+            "//third_party/mnn/source/backend/cpu/x86_x64/avx/MNNMatrixSub.cpp",
+            "//third_party/mnn/source/backend/cpu/x86_x64/avx/WinogradAVX2.cpp",
+
+            "//third_party/mnn/source/backend/cpu/x86_x64/avxfma/_AVX_MNNGemmFloatUnitMainFMA6x16.S",
+            "//third_party/mnn/source/backend/cpu/x86_x64/avxfma/_AVX_MNNGemmFloatUnitMainFMA_Fused.S",
+            "//third_party/mnn/source/backend/cpu/x86_x64/avxfma/_AVX_MNNGemmFloatUnitMainFMA.S",
+            "//third_party/mnn/source/backend/cpu/x86_x64/avxfma/FunctionSummary.hpp",
+            "//third_party/mnn/source/backend/cpu/x86_x64/avxfma/GemmAVX2FMABF16.cpp",
+            "//third_party/mnn/source/backend/cpu/x86_x64/avxfma/GemmAVX2FMA.cpp",
+
+            "//third_party/mnn/source/backend/cpu/x86_x64/sse/FunctionSummary.hpp",
+            "//third_party/mnn/source/backend/cpu/x86_x64/sse/GemmCommon.cpp",
+            "//third_party/mnn/source/backend/cpu/x86_x64/sse/GemmCommon.hpp",
+            "//third_party/mnn/source/backend/cpu/x86_x64/sse/GemmFunction.hpp",
+            "//third_party/mnn/source/backend/cpu/x86_x64/sse/GemmSSE.cpp",
+            
+            "//third_party/mnn/source/backend/cpu/x86_x64/sse/CommonOptFunction.cpp",
+            "//third_party/mnn/source/backend/cpu/x86_x64/sse/MNNMatrixAdd.cpp",
+            "//third_party/mnn/source/backend/cpu/x86_x64/sse/MNNMatrixSub.cpp",
+        ]
+      }
+    }
+
+  #下面两项，请根据实际进行修改并取消注释
+  #part_name = "inputmethod_native"
+  #subsystem_name = "miscservices"
+}
+
